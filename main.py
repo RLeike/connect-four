@@ -10,16 +10,18 @@ import pickle
 
 load_model = False
 save_model = True
-model_name = "testNet"
 
 
 trainSteps = 10000000
 memSize = 2000000
 #whether some games are shown once completed during training
 showGames = True
-epsStart = 1.0
-epsEnd = 0.05
-epsDecaySteps = 10.0e6
+epsStart = 1.
+epsEnd = 0.1
+epsDecaySteps = 2.0e6
+lr = .01
+mom=.99
+model_name = "testNet_{}".format(lr)
 used_loss = agent.zero_sum_loss
 preprocessing='distinguishPlayers'
 
@@ -27,20 +29,21 @@ preprocessing='distinguishPlayers'
 
 g = env.FourWins(preprocessing=preprocessing)
 state_shape = g.preprocessedState(1)[0].shape
-ag = agent.FeedforwardAgent(state_shape, [(4,3,16),(3,2,64), (100,)], (g.state.shape[0],), nonlinearity = ['relu','relu','relu','id'], used_loss = used_loss, model_name = model_name)
+ag = agent.FeedforwardAgent(state_shape, [(4,3,16),(3,2,64), (100,)], (g.state.shape[0],), nonlinearity = ['relu','relu','relu','id'], used_loss = used_loss, model_name = model_name, learning_rate=lr)
 
 if load_model:
     try:
         #     Restore variables from disk.
-        agent.variables = np.load(model_name+'.npy')
+        vs = np.load(model_name+'.npy', allow_pickle=True)
+        ag.variables = [[np.array(a) for a in b] for b in vs]
         print("succesfully loaded model "+ ag.model_name+" from file!")
     except :
         raise ValueError("model could not be loaded. Are you sure a model with these parameters exists?")
         
+
 if not load_model:
     rng = random.PRNGKey(0)
     ag.init_variables(rng)
-
 
 def update_eps(step, agent):
     #let exploration epsilon decay
@@ -68,7 +71,7 @@ def display_game(game, reward, action, player):
             p = "o"
         else:
             p = "+"
-        print("Player "+p+" ended game.")
+        print("Player "+p+" {}.".format(["lost","won"][(reward+1)//2]))
         game.show()
         
 #*************TRAINING*****************
@@ -76,16 +79,16 @@ mem = memory.Memory(g.preprocessedState(1)[0].shape, (g.state.shape[0],),size=me
 player = 1
 cumulativ_loss = 0.
 for step in range(trainSteps):
-    if step % 10000 == 0:
+    if step % 100000 == 0:
         update_eps(step, ag)
-        cumulativ_loss = display_progress(step, ag, cumulativ_loss/10000.)
+        cumulativ_loss = display_progress(step, ag, cumulativ_loss/100000.)
     #the following code plays games according to epsilon greedy and stores them in mem
     s = g.preprocessedState(player)
 #    move = ag.think_ahead(g,player,1,noise=0.05)
     move = ag.training_move(s)
     a = np.argmax(move)
-    move = onp.zeros(move.shape)#remove when not thinking
-    move[a]=1#remove when not thinking
+    move = onp.zeros(move.shape)
+    move[a]=1
     r = g.play(player,a)
     mem.store(s[0],move,r,player)
     if r != 0:
@@ -118,7 +121,7 @@ def get_ai_move(game, player, noise = 0., think_ahead = 0):
         aiMove = ag.think_ahead(game, player, think_ahead)[np.newaxis,:]
     else:
         aiMove = ag.prediction(s)
-    a = np.argmax(aiMove + np.random.normal(size = aiMove.shape)*noise)
+    a = onp.argmax(aiMove + onp.random.normal(size = aiMove.shape)*noise)
     print(aiMove, a)
     #print("expected reward:",aiMove[0,a])
     return a

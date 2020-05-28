@@ -78,7 +78,8 @@ class FeedforwardAgent(AbstractAgent):
     def __init__(self,state_shape, hidden_shape,  action_shape, 
             nonlinearity = ['relu','relu','relu','sigmoid'],\
             used_loss = zero_sum_loss, gamma = 0.99,\
-            model_name = "testNet", stop_gradient = True, action_noise=0.01):
+            model_name = "testNet", stop_gradient = True,
+            action_noise=0.01, learning_rate=0.001):
         """init shall build the computation graph and all relevant quantities
         implementations will probably need many parameters here"""
         """
@@ -95,7 +96,7 @@ class FeedforwardAgent(AbstractAgent):
         self.loss_paras['gamma'] = gamma
         self.action_noise = action_noise
         self.epsilon = 0.1
-        self.learning_rate = 1e-2
+        self.learning_rate = learning_rate
         self.variables = None
         layers = []
         from jax.experimental import stax
@@ -116,7 +117,7 @@ class FeedforwardAgent(AbstractAgent):
         print("shapes:", self.shapes)
 
         self._loss = lambda params, inp: self.used_loss(lambda s: self._predict(params, s), *inp, paras=self.loss_paras)
-        self._opt_init, self._train_step, self._get_params = optimizers.momentum(self.learning_rate, mass=.9)
+        self._opt_init, self._train_step, self._get_params = optimizers.adam(self.learning_rate)#, mass=momentum)
         self._initialized_optimizer = False
         self._steps = 0
         @jit
@@ -183,7 +184,7 @@ class FeedforwardAgent(AbstractAgent):
         if steps == 0:
             return self.prediction(game.preprocessedState(player))[0,:]
         else:
-            values = np.zeros(self.shapes[-1])
+            values = onp.zeros(self.shapes[-1])
             for i in range(self.shapes[-1][0]):
                 r = game.play(player, i)
                 if r != 0:
@@ -193,13 +194,13 @@ class FeedforwardAgent(AbstractAgent):
                         values[i] = r/2.+0.5
                 else:
                     if self.used_loss == zero_sum_loss:
-                        values[i] = -self.loss_paras['gamma']*np.amax(self.think_ahead(game, player*(-1), steps-1))
+                        values[i] = -self.loss_paras['gamma']*onp.amax(self.think_ahead(game, player*(-1), steps-1))
                     elif self.used_loss == winner_loss:
-                        omax = np.amax(self.think_ahead(game, player*(-1), steps-1))
+                        omax = onp.amax(self.think_ahead(game, player*(-1), steps-1))
                         values[i] = .5-self.loss_paras['gamma']*(omax-0.5)
                 if r != -1:
                     game.undoPlay(i)
-            return values+np.random.normal(size=values.shape)*noise
+            return values+onp.random.normal(size=values.shape)*noise
 
 
             
