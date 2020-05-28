@@ -18,7 +18,7 @@ Run the code with
 
 ## Background
 
-Deep Q-Learning was first introduced by [1], who trained a realtively small neural network to play atari games.
+Deep Q-Learning was first introduced by [1], who trained a relatively small neural network to play atari games.
 
 ## Implementation
 
