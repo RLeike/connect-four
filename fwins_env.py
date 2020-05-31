@@ -46,8 +46,8 @@ class FourWins:
             return self.state[np.newaxis,:,:,np.newaxis]*player
         if self.preprocessing == 'distinguishPlayers':
             x = np.zeros((1,)+self.dims+(2,))
-            x = np.stack([player*np.clip(self.state*player,0,1),
-                    player*np.clip(-self.state*player,0,1)], axis=2)
+            x = np.stack([np.clip(self.state*player,0,1),
+                    np.clip(-self.state*player,0,1)], axis=2)
             return x.reshape((1,)+self.dims+(2,))
             
     
