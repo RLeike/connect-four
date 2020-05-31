@@ -14,40 +14,7 @@ def zero_sum_loss(predict, s1, a_, r_, s2, paras= {}):
     rt = np.reshape(r_,[-1])
     Q_2 = rt - paras['gamma'] * np.amax(nets2,axis=1)*(1-np.abs(rt))
     Q_2 = stop_gradient(Q_2)
-    return np.mean((Q_1-Q_2)*(Q_1-Q_2))
-
-
-def zero_sum_loss_no_stop(nets1, a_, r_, nets2, paras= {}):
-    Q_1 = np.sum(nets1*a_, axis = 1)
-    rt = np.reshape(r_,[-1])
-    Q_2 = rt - paras['gamma'] * np.amax(nets2,axis=1)*(1-np.abs(rt))
-    return np.mean((Q_1-Q_2)*(Q_1-Q_2))
-
-def winner_loss(nets1,a_,w_, nets2, paras = {}):
-    #takes sigmoid input and returns cross entropy
-    wt = np.reshape(w_,[-1])
-    KL = -wt*np.log(np.sum(nets1*a_,axis=1)) - (1-wt)*np.log(1e-10+1-np.sum(nets1*a_,axis=1))
-    return np.mean(KL)
-
-    
-def autoencoder_loss(nets1, s1):
-    Q = nets1
-    #takes net output and measures squared distance to real state
-    LQ = np.mean((Q-s1)*(Q-s1))
-    return LQ
-
-        
-def time_evolution_loss(Tnet, r_, s2):
-    Q = Tnet
-    #takes net output and measures squared distance to real future state
-    LQ = np.mean((Q[0]-s2)*(Q[0]-s2))
-    LQ += np.mean((Q[1]-r_)*(Q[1]-r_))
-    return LQ
-
-def action_loss(nets1,a_):
-    #assumes maxout net but without maxout, for supervised learning
-    l = np.sum(a_*nets1,axis=1)-np.log(np.sum(np.exp(nets1)))
-    return l
+    return np.mean((Q_1-Q_2)**2)
 
 
 
@@ -116,17 +83,16 @@ class FeedforwardAgent(AbstractAgent):
         self._predict = jit(predict)
         print("shapes:", self.shapes)
 
-        self._loss = lambda params, inp: self.used_loss(lambda s: self._predict(params, s), *inp, paras=self.loss_paras)
-        self._opt_init, self._train_step, self._get_params = optimizers.adam(self.learning_rate)#, mass=momentum)
+        self._loss = lambda params, inp: self.used_loss(lambda s: self._predict(params, s), *inp[:4], paras=self.loss_paras)
+        self._opt_init, self._train_step, self._get_params = optimizers.momentum(self.learning_rate, mass=.9)
         self._initialized_optimizer = False
         self._steps = 0
-        @jit
-        def update(opt_state, batch):
+        def update(i, opt_state, batch):
             var = self._get_params(opt_state)
             l, grad = value_and_grad(self._loss)(var, batch)
-            opt_state = self._train_step(self._steps, grad, self._opt_state)
+            opt_state = self._train_step(i, grad, opt_state)
             return l, opt_state
-        self._update = update
+        self._update = jit(update)
 
     def init_variables(self, rng):
         _, self.variables = self._initop(rng, (-1,)+self.shapes[0])
@@ -158,20 +124,16 @@ class FeedforwardAgent(AbstractAgent):
         #apply one gradient descent step from a historic sample, returns loss
         if not self._initialized_optimizer:
             self._opt_state = self._opt_init(self.variables)
+            self._initialized_optimizer = True
         batch = None
-        if self.used_loss == zero_sum_loss:
-            batch = mem.get_minibatch(size=minibatchSize)
-            l, self._opt_state = self._update(self._opt_state, batch)
-            self.variables = self._get_params(self._opt_state)
-            self._steps += 1
-            return l
-        if self.used_loss == winner_loss:
-            batch = mem.get_minibatch(size=minibatchSize, include_wins = True)
-            l = self.loss_and_train_step(batch[0], batch[1], batch[4])
-            return l[0]
+        batch = mem.get_minibatch(size=minibatchSize)
+        l, self._opt_state = self._update(self._steps, self._opt_state, batch)
+        self.variables = self._get_params(self._opt_state)
+        self._steps += 1
+        return l
 
     def show_kernel(self):
-        W = self.variables[0][:,:,0,:]
+        W = self.variables[0][0][:,:,0,:]
         im = np.zeros((19,19))
         for i in range(16):
             px = int(i/4)
@@ -188,16 +150,9 @@ class FeedforwardAgent(AbstractAgent):
             for i in range(self.shapes[-1][0]):
                 r = game.play(player, i)
                 if r != 0:
-                    if self.used_loss == zero_sum_loss:
-                        values[i] = r
-                    elif self.used_loss == winner_loss:
-                        values[i] = r/2.+0.5
+                    values[i] = r
                 else:
-                    if self.used_loss == zero_sum_loss:
-                        values[i] = -self.loss_paras['gamma']*onp.amax(self.think_ahead(game, player*(-1), steps-1))
-                    elif self.used_loss == winner_loss:
-                        omax = onp.amax(self.think_ahead(game, player*(-1), steps-1))
-                        values[i] = .5-self.loss_paras['gamma']*(omax-0.5)
+                    values[i] = -self.loss_paras['gamma']*onp.amax(self.think_ahead(game, player*(-1), steps-1))
                 if r != -1:
                     game.undoPlay(i)
             return values+onp.random.normal(size=values.shape)*noise
@@ -212,12 +167,8 @@ def compute_avg_loss(agent, mem, miniBatchSize = 50):
     N_samps = 2000
     for i in range(N_samps):
         l = None
-        if agent.used_loss == zero_sum_loss:
-            batch = mem.get_minibatch(size=miniBatchSize)
-            l = agent.loss(batch)
-        if agent.used_loss == winner_loss:
-            batch = mem.get_minibatch(size=miniBatchSize,include_wins = True)
-            l = agent.loss(batch[0], batch[1], batch[4])
+        batch = mem.get_minibatch(size=miniBatchSize)
+        l = agent.loss(batch)
         lmax = max(l,lmax)
         lmin = min(l,lmin)
         lavg += l
