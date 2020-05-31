@@ -96,6 +96,8 @@ for step in range(trainSteps):
             display_game(g,r,a,player)
         g.reset()
     player *= -1
+    if r!= 0:
+        player=1
     #Here the actual training happens in minibatches
     if step>mem.size/2 and step % 15 == 0:
         cumulativ_loss += 15*ag.train(mem, minibatchSize=50)
