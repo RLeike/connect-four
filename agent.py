@@ -83,10 +83,20 @@ class FeedforwardAgent(AbstractAgent):
         print("shapes:", self.shapes)
 
         self._loss = lambda params, inp: self.used_loss(lambda s: self._predict(params, s), *inp[:4], paras=self.loss_paras)
-        self._opt_init, self._train_step, self._get_params = optimizers.momentum(self.learning_rate, mass=.9)
+        self._opt_init = lambda x:x
+        self._get_params  = lambda x:x
         self._initialized_optimizer = False
         self._steps = 0
         def update(i, opt_state, batch):
+            var = opt_state
+            l, grad = value_and_grad(self._loss)(var, batch)
+            nvar = tuple()
+            for j in range(len(opt_state)):
+                temp = tuple()
+                for k in range(len(opt_state[j])):
+                    temp += (var[j][k] - self.learning_rate*grad[j][k],)
+                nvar += (temp,)
+            return l, nvar
             var = self._get_params(opt_state)
             l, grad = value_and_grad(self._loss)(var, batch)
             opt_state = self._train_step(i, grad, opt_state)
