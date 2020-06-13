@@ -12,24 +12,28 @@ load_model = False
 save_model = True
 
 
-trainSteps = 10000000
-memSize = 2000000
+trainSteps = int(4e6)
+memSize = int(1.5e6)
 #whether some games are shown once completed during training
 showGames = True
 epsStart = 1.
-epsEnd = 0.1
-epsDecaySteps = 2.0e6
-lr = .01
-mom=.99
-model_name = "testNet_{}".format(lr)
+epsEnd = 0.15
+epsDecaySteps = 1.0e6
+lr = 1e-3
+model_name = "parameters"
 used_loss = agent.zero_sum_loss
 preprocessing='distinguishPlayers'
+minmax_training = 0
+minmax_playing = 4
 
 
 
-g = env.FourWins(preprocessing=preprocessing)
+g = env.FourWins(preprocessing=preprocessing, trivial=False)
 state_shape = g.preprocessedState(1)[0].shape
-ag = agent.FeedforwardAgent(state_shape, [(4,3,16),(3,2,64), (100,)], (g.state.shape[0],), nonlinearity = ['relu','relu','relu','id'], used_loss = used_loss, model_name = model_name, learning_rate=lr)
+ag = agent.FeedforwardAgent(state_shape, [(4,3,16),(3,2,64), (100,)],
+        (g.state.shape[0],), nonlinearity = ['relu','relu','relu','id'],
+        used_loss = used_loss, model_name = model_name, learning_rate=lr,
+        action_noise=0.01, gamma=0.98)
 
 if load_model:
     try:
@@ -42,7 +46,7 @@ if load_model:
         
 
 if not load_model:
-    rng = random.PRNGKey(0)
+    rng = random.PRNGKey(1)
     ag.init_variables(rng)
 
 def update_eps(step, agent):
@@ -84,11 +88,19 @@ for step in range(trainSteps):
         cumulativ_loss = display_progress(step, ag, cumulativ_loss/100000.)
     #the following code plays games according to epsilon greedy and stores them in mem
     s = g.preprocessedState(player)
-#    move = ag.think_ahead(g,player,1,noise=0.05)
-    move = ag.training_move(s)
+    if minmax_training > 0:
+        #Use Minmax to generate training moves
+        if onp.random.rand()>ag.epsilon:
+            move = ag.think_ahead(g,player,minmax_training,noise=0.05)
+            a = np.argmax(move)
+        else:
+            move = onp.zeros(7)
+            a = onp.random.randint(0,7) 
+        move = onp.zeros(move.shape)
+        move[a]=1
+    else:
+        move = ag.training_move(s)
     a = np.argmax(move)
-    move = onp.zeros(move.shape)
-    move[a]=1
     r = g.play(player,a)
     mem.store(s[0],move,r,player)
     if r != 0:
@@ -103,8 +115,6 @@ for step in range(trainSteps):
         cumulativ_loss += 15*ag.train(mem, minibatchSize=50)
 #***********END TRAINING****************
 
-#with open("memory.pcl",'wb') as f:
-#    pickle.dump(mem,f)
 
 # Save the variables to disk.
 if trainSteps>=20000:
@@ -125,7 +135,6 @@ def get_ai_move(game, player, noise = 0., think_ahead = 0):
         aiMove = ag.prediction(s)
     a = onp.argmax(aiMove + onp.random.normal(size = aiMove.shape)*noise)
     print(aiMove, a)
-    #print("expected reward:",aiMove[0,a])
     return a
     
 def get_user_move(game):
@@ -169,4 +178,4 @@ def testgame(game = None, ai_begins=False, ai_noise=0., thinking = 0):
             game.show()
             print("Player + wins!")
             break
-testgame(thinking=2)
+testgame(ai_begins=True, thinking=minmax_playing)
