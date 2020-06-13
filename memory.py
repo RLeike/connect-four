@@ -73,7 +73,7 @@ class Memory:
             game.state = self.new_state[i,:,:,0] #this is still gamespecific
             game.show()
             
-    def get_minibatch(self, size = 10, include_wins=False):
+    def get_minibatch(self, size = 10):
         """
         makes a minibatch of random experiences. output should be handled read only!
         :param size: how many things are in the minibatch
@@ -93,9 +93,7 @@ class Memory:
             ols = np.flip(ols, axis = 1)
             nes = np.flip(nes, axis = 1)
             ac = np.flip(ac, axis = 1)
-        if include_wins == False:
-            return (ols, ac, self.reward[batch_index],nes)
-        return (ols, ac, self.reward[batch_index], nes, (self.win[batch_index]*self.player[batch_index])/2.+0.5)
+        return (ols, ac, self.reward[batch_index], nes)
     
     
 class FakeMemory:
