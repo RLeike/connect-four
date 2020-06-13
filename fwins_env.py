@@ -21,11 +21,12 @@ def _lines():
 class FourWins:
     #The class that performs all game-specific stuff
     #Contains state which is a numpy array
-    def __init__(self, preprocessing= 'addAxis'):
+    def __init__(self, preprocessing= 'addAxis', trivial=False):
         self.dims = (7,6)
         self.top_stone = np.ones(self.dims[0],dtype=np.int32)*(self.dims[1]-1)
         self.state = np.zeros(self.dims)
         self.preprocessing = preprocessing
+        self.trivial = trivial
 
     def play(self, player, column):
         #Takes a player (-1 for +, 1 for o)
@@ -70,6 +71,8 @@ class FourWins:
         self.state = np.zeros(self.dims)
   
     def _checkwin(self, pos):
+        if self.trivial:
+            return int(self.state[3,5])
         l = _lines()+pos.reshape((1,1,2))
         mask = 1-np.any(np.any(l<0,axis=1),axis=1)
         mask *= 1-np.any(l[:,:,0]>=self.dims[0],axis=1)
