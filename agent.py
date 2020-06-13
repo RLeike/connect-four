@@ -1,7 +1,6 @@
 import jax.numpy as np
 import numpy as onp
 import matplotlib.pyplot as plt
-import net as nt
 from jax.experimental import optimizers
 from jax import value_and_grad, jit
 from jax.lax import stop_gradient
